@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, KeyRound, Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { AccessKeyQrCode } from "@/components/keys/AccessKeyQrCode";
 import { createKey } from "@/lib/client-api";
 import type { CreatedKeyResponse } from "@/lib/api-types";
 import { useUiStore } from "@/store/ui-store";
@@ -72,8 +73,9 @@ export function CreateKeyDialog() {
         <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
           <p className="text-sm font-semibold text-emerald-950">One-time access key</p>
           <p className="mt-1 text-xs text-emerald-900">
-            Share this key with a trusted person. It is never stored raw and will not be shown again.
+            Share this key or QR code with a trusted person. It is never stored raw and will not be shown again.
           </p>
+          <AccessKeyQrCode shareToken={created.shareToken} />
           <div className="mt-3 flex gap-2">
             <input
               readOnly
