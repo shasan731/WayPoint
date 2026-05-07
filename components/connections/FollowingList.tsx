@@ -1,10 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { UsersRound, WifiOff } from "lucide-react";
-import { useEffect, useState } from "react";
 import { ConnectionCard } from "@/components/connections/ConnectionCard";
-import { fetchFollowing } from "@/lib/client-api";
+import { useFollowingQuery } from "@/lib/use-following-query";
 
 function SkeletonCard() {
   return (
@@ -17,29 +15,7 @@ function SkeletonCard() {
 }
 
 export function FollowingList({ compact = false }: { compact?: boolean }) {
-  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
-  const [hidden, setHidden] = useState(() => (typeof document === "undefined" ? false : document.hidden));
-
-  useEffect(() => {
-    const onOnline = () => setOnline(true);
-    const onOffline = () => setOnline(false);
-    const onVisibility = () => setHidden(document.hidden);
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, []);
-
-  const following = useQuery({
-    queryKey: ["following"],
-    queryFn: fetchFollowing,
-    enabled: online,
-    refetchInterval: online ? (hidden ? 60_000 : 10_000) : false
-  });
+  const { query: following, online } = useFollowingQuery();
 
   if (!online) {
     return (

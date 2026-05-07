@@ -4,17 +4,21 @@ import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 
 export function AppShell({
   active,
+  fullScreen = false,
   children
 }: {
-  active: "dashboard" | "map" | "settings";
+  active: "dashboard" | "map" | "friends" | "keys" | "settings";
+  fullScreen?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-dvh bg-background text-foreground">
+    <div className="h-dvh overflow-hidden bg-background text-foreground">
       <LocationTransmitter />
-      <div className="flex min-h-dvh">
+      <div className="flex h-full min-h-0">
         <DesktopSidebar active={active} />
-        <main className="min-w-0 flex-1 pb-24 md:pb-0">{children}</main>
+        <main className={fullScreen ? "min-h-0 min-w-0 flex-1" : "min-h-0 min-w-0 flex-1 overflow-y-auto pb-24 md:pb-0"}>
+          {children}
+        </main>
       </div>
       <MobileBottomNav active={active} />
     </div>

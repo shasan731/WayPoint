@@ -1,11 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useQuery } from "@tanstack/react-query";
 import { MapPinned, WifiOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { MapErrorBoundary } from "@/components/map/MapErrorBoundary";
-import { fetchFollowing } from "@/lib/client-api";
+import type { FollowingItem } from "@/lib/api-types";
+import { useFollowingQuery } from "@/lib/use-following-query";
 
 const LeafletMapInner = dynamic(
   () => import("@/components/map/LeafletMapInner").then((module) => module.LeafletMapInner),
@@ -22,45 +22,34 @@ const LeafletMapInner = dynamic(
   }
 );
 
-export function WayPointMap({ className = "" }: { className?: string }) {
-  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
-  const [hidden, setHidden] = useState(() => (typeof document === "undefined" ? false : document.hidden));
-
-  useEffect(() => {
-    const onOnline = () => setOnline(true);
-    const onOffline = () => setOnline(false);
-    const onVisibility = () => setHidden(document.hidden);
-
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, []);
-
-  const following = useQuery({
-    queryKey: ["following"],
-    queryFn: fetchFollowing,
-    enabled: online,
-    refetchInterval: online ? (hidden ? 60_000 : 10_000) : false
-  });
-
-  const items = following.data?.items ?? [];
+export function WayPointMap({
+  className = "",
+  items: providedItems,
+  selectedConnectionId = null,
+  showOfflineBadge = true
+}: {
+  className?: string;
+  items?: FollowingItem[];
+  selectedConnectionId?: string | null;
+  showOfflineBadge?: boolean;
+}) {
+  const { query: following, online } = useFollowingQuery({ enabled: !providedItems });
+  const items = useMemo(() => providedItems ?? following.data?.items ?? [], [following.data?.items, providedItems]);
+  const visibleItems = useMemo(
+    () => (selectedConnectionId ? items.filter((item) => item.connectionId === selectedConnectionId) : items),
+    [items, selectedConnectionId]
+  );
 
   return (
     <div className={`relative overflow-hidden rounded-md border border-border bg-muted ${className}`}>
-      {!online ? (
+      {!online && showOfflineBadge ? (
         <div className="absolute left-4 top-4 z-[20] flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 shadow-sm">
           <WifiOff className="h-4 w-4" />
           Offline
         </div>
       ) : null}
       <MapErrorBoundary>
-        <LeafletMapInner items={items} />
+        <LeafletMapInner items={visibleItems} selectedConnectionId={selectedConnectionId} />
       </MapErrorBoundary>
     </div>
   );

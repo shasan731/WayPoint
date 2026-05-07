@@ -1,16 +1,17 @@
 import Link from "next/link";
-import { KeyRound, Map, Settings, ShieldCheck, SquareStack } from "lucide-react";
+import { KeyRound, Map, Settings, ShieldCheck, SquareStack, UsersRound } from "lucide-react";
 import { TrackingStatus } from "@/components/location/TrackingStatus";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/dashboard", label: "Dashboard", icon: SquareStack, id: "dashboard" },
   { href: "/map", label: "Live map", icon: Map, id: "map" },
-  { href: "/dashboard#keys", label: "Access keys", icon: KeyRound, id: "keys" },
+  { href: "/friends", label: "Friends", icon: UsersRound, id: "friends" },
+  { href: "/keys", label: "Access keys", icon: KeyRound, id: "keys" },
   { href: "/settings", label: "Settings", icon: Settings, id: "settings" }
 ];
 
-export function DesktopSidebar({ active }: { active: "dashboard" | "map" | "settings" }) {
+export function DesktopSidebar({ active }: { active: "dashboard" | "map" | "friends" | "keys" | "settings" }) {
   return (
     <aside className="hidden h-dvh w-80 shrink-0 border-r border-border bg-white p-4 md:flex md:flex-col">
       <Link href="/dashboard" className="flex items-center gap-3 rounded-md px-2 py-2">
@@ -26,7 +27,7 @@ export function DesktopSidebar({ active }: { active: "dashboard" | "map" | "sett
       <nav className="mt-6 grid gap-1">
         {items.map((item) => {
           const Icon = item.icon;
-          const selected = item.id === active || (item.id === "keys" && active === "dashboard");
+          const selected = item.id === active;
           return (
             <Link
               key={item.href}

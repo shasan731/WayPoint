@@ -10,7 +10,7 @@ type Mode = "login" | "register";
 
 function safeCallbackUrl(value: string | undefined): string {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/dashboard";
+    return "/map";
   }
   return value;
 }
