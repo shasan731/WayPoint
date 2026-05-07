@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { IScannerControls } from "@zxing/browser";
-import { Camera, KeyRound, Plus, X } from "lucide-react";
+import { Camera, ImageUp, KeyRound, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { joinConnection } from "@/lib/client-api";
@@ -13,6 +13,7 @@ export function JoinKeyForm() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scannerControlsRef = useRef<IScannerControls | null>(null);
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
@@ -43,8 +44,19 @@ export function JoinKeyForm() {
       setScannerError(null);
 
       try {
+        if (!window.isSecureContext) {
+          setScannerError("Camera scanning requires HTTPS. Paste the key or upload a QR image instead.");
+          return;
+        }
+
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setScannerError("This browser does not expose camera access. Paste the key or upload a QR image instead.");
+          return;
+        }
+
         const video = videoRef.current;
         if (!video) {
+          setScannerError("Scanner view is not ready. Close it and try again.");
           return;
         }
 
@@ -54,7 +66,17 @@ export function JoinKeyForm() {
           delayBetweenScanSuccess: 700
         });
 
-        const controls = await reader.decodeFromVideoDevice(undefined, video, (result, _error, callbackControls) => {
+        const controls = await reader.decodeFromConstraints(
+          {
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            },
+            audio: false
+          },
+          video,
+          (result, _error, callbackControls) => {
           const scannedText = result?.getText()?.trim();
           if (!scannedText) {
             return;
@@ -65,7 +87,8 @@ export function JoinKeyForm() {
           setScannerOpen(false);
           callbackControls.stop();
           pushToast({ type: "success", title: "QR code scanned" });
-        });
+          }
+        );
 
         if (cancelled) {
           controls.stop();
@@ -73,9 +96,9 @@ export function JoinKeyForm() {
         }
 
         scannerControlsRef.current = controls;
-      } catch {
+      } catch (error) {
         if (!cancelled) {
-          setScannerError("Camera scanning is unavailable. Paste the key instead.");
+          setScannerError(cameraErrorMessage(error));
         }
       }
     }
@@ -124,6 +147,19 @@ export function JoinKeyForm() {
           <Camera className="h-4 w-4" />
           Scan
         </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+              void scanImageFile(file, setShareToken, pushToast, setScannerError);
+            }
+            event.currentTarget.value = "";
+          }}
+        />
         <Button type="submit" disabled={mutation.isPending || trimmedToken.length === 0}>
           <Plus className="h-4 w-4" />
           {mutation.isPending ? "Adding" : "Add friend"}
@@ -152,11 +188,70 @@ export function JoinKeyForm() {
             ) : (
               <p className="border-t border-border p-4 text-sm text-muted-foreground">Camera access is used only while this scanner is open.</p>
             )}
+            <div className="grid gap-2 border-t border-border p-4 sm:grid-cols-2">
+              <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                <ImageUp className="h-4 w-4" />
+                Scan image
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setScannerOpen(false)}>
+                Paste instead
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}
     </section>
   );
+}
+
+async function scanImageFile(
+  file: File,
+  setShareToken: (value: string) => void,
+  pushToast: (toast: { type: "success" | "error" | "info"; title: string; description?: string }) => void,
+  setScannerError: (value: string | null) => void
+) {
+  const objectUrl = URL.createObjectURL(file);
+  const image = new Image();
+  image.src = objectUrl;
+
+  try {
+    await image.decode();
+    const { BrowserQRCodeReader } = await import("@zxing/browser");
+    const reader = new BrowserQRCodeReader();
+    const result = await reader.decodeFromImageElement(image);
+    const scannedText = result.getText()?.trim();
+
+    if (!scannedText) {
+      throw new Error("No QR code was found in that image.");
+    }
+
+    setShareToken(normalizeScannedKey(scannedText));
+    setScannerError(null);
+    pushToast({ type: "success", title: "QR image scanned" });
+  } catch {
+    setScannerError("Could not find a WayPoint QR code in that image.");
+    pushToast({ type: "error", title: "QR scan failed", description: "Try a clearer image or paste the key." });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function cameraErrorMessage(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+      return "Camera permission was blocked. Allow camera access in the browser or upload a QR image.";
+    }
+
+    if (error.name === "NotFoundError" || error.name === "OverconstrainedError") {
+      return "No compatible camera was found. Upload a QR image or paste the key.";
+    }
+
+    if (error.name === "NotReadableError") {
+      return "The camera is already in use by another app. Close it and try again.";
+    }
+  }
+
+  return "Camera scanning is unavailable. Upload a QR image or paste the key.";
 }
 
 function normalizeScannedKey(value: string): string {
