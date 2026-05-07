@@ -3,6 +3,7 @@ node_modules
 coverage
 dist
 .env
+.env.vercel
 .env*.local
 *.tsbuildinfo
 *.log
