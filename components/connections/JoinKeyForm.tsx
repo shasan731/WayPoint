@@ -7,13 +7,17 @@ import { Button } from "@/components/ui/button";
 import { joinConnection } from "@/lib/client-api";
 import { useUiStore } from "@/store/ui-store";
 
+type ScannerStatus = "idle" | "starting" | "scanning";
+
 export function JoinKeyForm() {
   const [shareToken, setShareToken] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
+  const [scannerStatus, setScannerStatus] = useState<ScannerStatus>("idle");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scannerControlsRef = useRef<{ stop: () => void } | null>(null);
+  const scannerSessionRef = useRef(0);
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
 
@@ -33,96 +37,120 @@ export function JoinKeyForm() {
   const trimmedToken = shareToken.trim();
 
   useEffect(() => {
-    if (!scannerOpen) {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function startScanner() {
-      setScannerError(null);
-
-      try {
-        if (!window.isSecureContext) {
-          setScannerError("Camera scanning requires HTTPS. Paste the key or upload a QR image instead.");
-          return;
-        }
-
-        if (!navigator.mediaDevices?.getUserMedia) {
-          setScannerError("This browser does not expose camera access. Paste the key or upload a QR image instead.");
-          return;
-        }
-
-        const video = videoRef.current;
-        if (!video) {
-          setScannerError("Scanner view is not ready. Close it and try again.");
-          return;
-        }
-
-        const stream = await openCameraStream();
-        if (cancelled) {
-          stopMediaStream(stream);
-          return;
-        }
-
-        await attachStreamToVideo(video, stream);
-        if (cancelled) {
-          stopMediaStream(stream);
-          detachVideo(video);
-          return;
-        }
-
-        const { BrowserQRCodeReader } = await import("@zxing/browser");
-        const reader = new BrowserQRCodeReader(undefined, {
-          delayBetweenScanAttempts: 350,
-          delayBetweenScanSuccess: 700
-        });
-
-        const zxingControls = reader.scan(video, (result, _error, callbackControls) => {
-          const scannedText = result?.getText()?.trim();
-          if (!scannedText) {
-            return;
-          }
-
-          const token = normalizeScannedKey(scannedText);
-          setShareToken(token);
-          callbackControls.stop();
-          stopMediaStream(stream);
-          detachVideo(video);
-          scannerControlsRef.current = null;
-          setScannerOpen(false);
-          pushToast({ type: "success", title: "QR code scanned" });
-        });
-
-        if (cancelled) {
-          zxingControls.stop();
-          stopMediaStream(stream);
-          detachVideo(video);
-          return;
-        }
-
-        scannerControlsRef.current = {
-          stop: () => {
-            zxingControls.stop();
-            stopMediaStream(stream);
-            detachVideo(video);
-          }
-        };
-      } catch (error) {
-        if (!cancelled) {
-          setScannerError(cameraErrorMessage(error));
-        }
-      }
-    }
-
-    void startScanner();
-
     return () => {
-      cancelled = true;
       scannerControlsRef.current?.stop();
       scannerControlsRef.current = null;
     };
-  }, [pushToast, scannerOpen]);
+  }, []);
+
+  function stopScanner() {
+    scannerSessionRef.current += 1;
+    scannerControlsRef.current?.stop();
+    scannerControlsRef.current = null;
+    if (videoRef.current) {
+      detachVideo(videoRef.current);
+    }
+    setScannerStatus("idle");
+  }
+
+  function openScanner() {
+    stopScanner();
+    setScannerError(null);
+    setScannerOpen(true);
+  }
+
+  function closeScanner() {
+    stopScanner();
+    setScannerError(null);
+    setScannerOpen(false);
+  }
+
+  async function startScannerFromGesture() {
+    const sessionId = scannerSessionRef.current + 1;
+    scannerSessionRef.current = sessionId;
+    scannerControlsRef.current?.stop();
+    scannerControlsRef.current = null;
+    setScannerError(null);
+    setScannerStatus("starting");
+
+    try {
+      if (!window.isSecureContext) {
+        setScannerError("Camera scanning requires HTTPS. Paste the key or upload a QR image instead.");
+        setScannerStatus("idle");
+        return;
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setScannerError("This browser does not expose camera access. Paste the key or upload a QR image instead.");
+        setScannerStatus("idle");
+        return;
+      }
+
+      const video = videoRef.current;
+      if (!video) {
+        setScannerError("Scanner view is not ready. Close it and try again.");
+        setScannerStatus("idle");
+        return;
+      }
+
+      const stream = await openCameraStream();
+      if (scannerSessionRef.current !== sessionId) {
+        stopMediaStream(stream);
+        return;
+      }
+
+      await attachStreamToVideo(video, stream);
+      if (scannerSessionRef.current !== sessionId) {
+        stopMediaStream(stream);
+        detachVideo(video);
+        return;
+      }
+
+      const { BrowserQRCodeReader } = await import("@zxing/browser");
+      const reader = new BrowserQRCodeReader(undefined, {
+        delayBetweenScanAttempts: 350,
+        delayBetweenScanSuccess: 700
+      });
+
+      const zxingControls = reader.scan(video, (result, _error, callbackControls) => {
+        const scannedText = result?.getText()?.trim();
+        if (!scannedText) {
+          return;
+        }
+
+        const token = normalizeScannedKey(scannedText);
+        setShareToken(token);
+        callbackControls.stop();
+        stopMediaStream(stream);
+        detachVideo(video);
+        scannerControlsRef.current = null;
+        setScannerStatus("idle");
+        setScannerOpen(false);
+        pushToast({ type: "success", title: "QR code scanned" });
+      });
+
+      if (scannerSessionRef.current !== sessionId) {
+        zxingControls.stop();
+        stopMediaStream(stream);
+        detachVideo(video);
+        return;
+      }
+
+      scannerControlsRef.current = {
+        stop: () => {
+          zxingControls.stop();
+          stopMediaStream(stream);
+          detachVideo(video);
+        }
+      };
+      setScannerStatus("scanning");
+    } catch (error) {
+      if (scannerSessionRef.current === sessionId) {
+        setScannerError(cameraErrorMessage(error));
+        setScannerStatus("idle");
+      }
+    }
+  }
 
   return (
     <section className="rounded-md border border-border bg-white p-4">
@@ -155,7 +183,7 @@ export function JoinKeyForm() {
           spellCheck={false}
           className="min-h-11 min-w-0 flex-1 rounded-md border border-input bg-white px-3 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
         />
-        <Button type="button" variant="secondary" onClick={() => setScannerOpen(true)}>
+        <Button type="button" variant="secondary" onClick={openScanner}>
           <Camera className="h-4 w-4" />
           Scan
         </Button>
@@ -167,7 +195,7 @@ export function JoinKeyForm() {
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (file) {
-              void scanImageFile(file, setShareToken, pushToast, setScannerError);
+              void scanImageFile(file, setShareToken, pushToast, setScannerError, closeScanner);
             }
             event.currentTarget.value = "";
           }}
@@ -186,13 +214,26 @@ export function JoinKeyForm() {
                 <h2 className="text-sm font-semibold">Scan access key</h2>
                 <p className="text-xs text-muted-foreground">Point the camera at a WayPoint QR code.</p>
               </div>
-              <Button type="button" variant="ghost" size="icon" aria-label="Close scanner" onClick={() => setScannerOpen(false)}>
+              <Button type="button" variant="ghost" size="icon" aria-label="Close scanner" onClick={closeScanner}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
             <div className="bg-black p-3">
-              <video ref={videoRef} className="aspect-square w-full rounded-md bg-black object-cover" muted playsInline />
+              <div className="relative overflow-hidden rounded-md bg-black">
+                <video ref={videoRef} className="aspect-square w-full bg-black object-cover" muted playsInline />
+                {scannerStatus !== "scanning" ? (
+                  <div className="absolute inset-0 grid place-items-center bg-black/80 p-6 text-center text-white">
+                    <div>
+                      <Camera className="mx-auto h-8 w-8" />
+                      <p className="mt-3 text-sm font-semibold">
+                        {scannerStatus === "starting" ? "Starting camera" : "Tap Start camera"}
+                      </p>
+                      <p className="mt-1 text-xs text-white/70">Installed PWAs need this direct tap to request camera permission.</p>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             {scannerError ? (
@@ -201,11 +242,15 @@ export function JoinKeyForm() {
               <p className="border-t border-border p-4 text-sm text-muted-foreground">Camera access is used only while this scanner is open.</p>
             )}
             <div className="grid gap-2 border-t border-border p-4 sm:grid-cols-2">
+              <Button type="button" onClick={() => void startScannerFromGesture()} disabled={scannerStatus === "starting"}>
+                <Camera className="h-4 w-4" />
+                {scannerStatus === "scanning" ? "Restart camera" : scannerStatus === "starting" ? "Starting" : "Start camera"}
+              </Button>
               <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
                 <ImageUp className="h-4 w-4" />
                 Scan image
               </Button>
-              <Button type="button" variant="ghost" onClick={() => setScannerOpen(false)}>
+              <Button type="button" variant="ghost" className="sm:col-span-2" onClick={closeScanner}>
                 Paste instead
               </Button>
             </div>
@@ -220,7 +265,8 @@ async function scanImageFile(
   file: File,
   setShareToken: (value: string) => void,
   pushToast: (toast: { type: "success" | "error" | "info"; title: string; description?: string }) => void,
-  setScannerError: (value: string | null) => void
+  setScannerError: (value: string | null) => void,
+  onSuccess?: () => void
 ) {
   const objectUrl = URL.createObjectURL(file);
   const image = new Image();
@@ -239,6 +285,7 @@ async function scanImageFile(
 
     setShareToken(normalizeScannedKey(scannedText));
     setScannerError(null);
+    onSuccess?.();
     pushToast({ type: "success", title: "QR image scanned" });
   } catch {
     setScannerError("Could not find a WayPoint QR code in that image.");
