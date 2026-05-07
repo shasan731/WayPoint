@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { IScannerControls } from "@zxing/browser";
 import { Camera, ImageUp, KeyRound, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -14,7 +13,7 @@ export function JoinKeyForm() {
   const [scannerError, setScannerError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const scannerControlsRef = useRef<IScannerControls | null>(null);
+  const scannerControlsRef = useRef<{ stop: () => void } | null>(null);
   const queryClient = useQueryClient();
   const pushToast = useUiStore((state) => state.pushToast);
 
@@ -60,23 +59,26 @@ export function JoinKeyForm() {
           return;
         }
 
+        const stream = await openCameraStream();
+        if (cancelled) {
+          stopMediaStream(stream);
+          return;
+        }
+
+        await attachStreamToVideo(video, stream);
+        if (cancelled) {
+          stopMediaStream(stream);
+          detachVideo(video);
+          return;
+        }
+
         const { BrowserQRCodeReader } = await import("@zxing/browser");
         const reader = new BrowserQRCodeReader(undefined, {
           delayBetweenScanAttempts: 350,
           delayBetweenScanSuccess: 700
         });
 
-        const controls = await reader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: { ideal: "environment" },
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            },
-            audio: false
-          },
-          video,
-          (result, _error, callbackControls) => {
+        const zxingControls = reader.scan(video, (result, _error, callbackControls) => {
           const scannedText = result?.getText()?.trim();
           if (!scannedText) {
             return;
@@ -84,18 +86,28 @@ export function JoinKeyForm() {
 
           const token = normalizeScannedKey(scannedText);
           setShareToken(token);
-          setScannerOpen(false);
           callbackControls.stop();
+          stopMediaStream(stream);
+          detachVideo(video);
+          scannerControlsRef.current = null;
+          setScannerOpen(false);
           pushToast({ type: "success", title: "QR code scanned" });
-          }
-        );
+        });
 
         if (cancelled) {
-          controls.stop();
+          zxingControls.stop();
+          stopMediaStream(stream);
+          detachVideo(video);
           return;
         }
 
-        scannerControlsRef.current = controls;
+        scannerControlsRef.current = {
+          stop: () => {
+            zxingControls.stop();
+            stopMediaStream(stream);
+            detachVideo(video);
+          }
+        };
       } catch (error) {
         if (!cancelled) {
           setScannerError(cameraErrorMessage(error));
@@ -252,6 +264,75 @@ function cameraErrorMessage(error: unknown): string {
   }
 
   return "Camera scanning is unavailable. Upload a QR image or paste the key.";
+}
+
+async function openCameraStream(): Promise<MediaStream> {
+  const environmentConstraints: MediaStreamConstraints = {
+    video: {
+      facingMode: { ideal: "environment" },
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    },
+    audio: false
+  };
+
+  try {
+    return await navigator.mediaDevices.getUserMedia(environmentConstraints);
+  } catch (error) {
+    if (error instanceof DOMException && (error.name === "OverconstrainedError" || error.name === "NotFoundError")) {
+      return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+
+    throw error;
+  }
+}
+
+async function attachStreamToVideo(video: HTMLVideoElement, stream: MediaStream): Promise<void> {
+  video.muted = true;
+  video.autoplay = true;
+  video.playsInline = true;
+  video.srcObject = stream;
+
+  if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("Camera preview did not start."));
+      }, 8_000);
+
+      const onLoadedMetadata = () => {
+        cleanup();
+        resolve();
+      };
+
+      const onError = () => {
+        cleanup();
+        reject(new Error("Camera preview failed."));
+      };
+
+      const cleanup = () => {
+        window.clearTimeout(timeout);
+        video.removeEventListener("loadedmetadata", onLoadedMetadata);
+        video.removeEventListener("error", onError);
+      };
+
+      video.addEventListener("loadedmetadata", onLoadedMetadata, { once: true });
+      video.addEventListener("error", onError, { once: true });
+    });
+  }
+
+  await video.play();
+}
+
+function stopMediaStream(stream: MediaStream) {
+  stream.getTracks().forEach((track) => track.stop());
+}
+
+function detachVideo(video: HTMLVideoElement) {
+  video.pause();
+  video.srcObject = null;
+  video.removeAttribute("src");
+  video.load();
 }
 
 function normalizeScannedKey(value: string): string {
