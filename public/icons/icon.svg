@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="WayPoint icon">
+  <rect width="512" height="512" rx="96" fill="#0f766e"/>
+  <circle cx="256" cy="220" r="116" fill="#ffffff" opacity="0.95"/>
+  <path fill="#0f766e" d="M256 105c-66 0-120 54-120 120 0 89 120 190 120 190s120-101 120-190c0-66-54-120-120-120Zm0 164a49 49 0 1 1 0-98 49 49 0 0 1 0 98Z"/>
+  <path fill="#f59e0b" d="M340 355c0 31-37 56-84 56s-84-25-84-56c0-12 6-24 17-33 25 27 53 50 67 61 14-11 42-34 67-61 11 9 17 21 17 33Z"/>
+</svg>

@@ -1,0 +1,24 @@
+{
+  "name": "WayPoint",
+  "short_name": "WayPoint",
+  "description": "Privacy-centric live location sharing through revocable access keys.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#0f766e",
+  "background_color": "#f6f9fb",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
