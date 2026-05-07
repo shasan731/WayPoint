@@ -5,6 +5,7 @@ import { TrackingStatus } from "@/components/location/TrackingStatus";
 import { WayPointMap } from "@/components/map/WayPointMap";
 import { FollowingList } from "@/components/connections/FollowingList";
 import { ConnectionsOverview } from "@/components/connections/ConnectionsOverview";
+import { JoinKeyForm } from "@/components/connections/JoinKeyForm";
 import { KeyManager } from "@/components/keys/KeyManager";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { getCurrentUser } from "@/lib/auth";
@@ -30,6 +31,7 @@ export default async function DashboardPage() {
         </section>
 
         <aside className="grid gap-4">
+          <JoinKeyForm />
           <FollowingList />
           <ConnectionsOverview />
           <KeyManager />

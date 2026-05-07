@@ -34,7 +34,7 @@ export function JoinConnectionPanel({ shareToken }: { shareToken: string }) {
           </div>
           <div>
             <h1 className="text-lg font-semibold">Join location share</h1>
-            <p className="text-sm text-muted-foreground">This link grants access only while the owner&apos;s key remains valid.</p>
+            <p className="text-sm text-muted-foreground">This access key grants access only while the owner keeps it valid.</p>
           </div>
         </div>
 

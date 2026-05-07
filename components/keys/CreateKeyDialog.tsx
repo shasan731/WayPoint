@@ -22,7 +22,7 @@ export function CreateKeyDialog() {
       setKeyLabel("");
       setExpiresAt("");
       void queryClient.invalidateQueries({ queryKey: ["keys"] });
-      pushToast({ type: "success", title: "Share key created", description: "Copy the link now; the token is shown once." });
+      pushToast({ type: "success", title: "Access key created", description: "Copy the key now; it is shown once." });
     },
     onError: (error) => {
       pushToast({ type: "error", title: "Could not create key", description: error.message });
@@ -70,21 +70,24 @@ export function CreateKeyDialog() {
 
       {created ? (
         <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
-          <p className="text-sm font-semibold text-emerald-950">One-time share link</p>
-          <p className="mt-1 text-xs text-emerald-900">This token is never stored and will not be shown again.</p>
+          <p className="text-sm font-semibold text-emerald-950">One-time access key</p>
+          <p className="mt-1 text-xs text-emerald-900">
+            Share this key with a trusted person. It is never stored raw and will not be shown again.
+          </p>
           <div className="mt-3 flex gap-2">
             <input
               readOnly
-              value={created.shareUrl}
-              className="min-w-0 flex-1 rounded-md border border-emerald-200 bg-white px-3 text-sm"
+              value={created.shareToken}
+              onFocus={(event) => event.currentTarget.select()}
+              className="min-w-0 flex-1 rounded-md border border-emerald-200 bg-white px-3 font-mono text-sm"
             />
             <Button
               type="button"
               size="icon"
-              aria-label="Copy share link"
+              aria-label="Copy access key"
               onClick={() => {
-                void navigator.clipboard.writeText(created.shareUrl);
-                pushToast({ type: "success", title: "Copied share link" });
+                void navigator.clipboard.writeText(created.shareToken);
+                pushToast({ type: "success", title: "Copied access key" });
               }}
             >
               <Copy className="h-4 w-4" />
